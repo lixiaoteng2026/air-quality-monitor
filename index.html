@@ -1,0 +1,1011 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>基于自适应卡尔曼滤波的多传感器空气质量监测系统</title>
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<style>
+  :root{
+    --bg:#f4f5fb;
+    --card:#ffffff;
+    --ink:#1f2340;
+    --sub:#5b6080;
+    --muted:#8a90ad;
+    --line:#e6e8f4;
+    --primary:#6366f1;
+    --primary-d:#4f46e5;
+    --violet:#8b5cf6;
+    --cyan:#06b6d4;
+    --emerald:#10b981;
+    --rose:#f43f5e;
+    --amber:#f59e0b;
+    --radius:18px;
+    --shadow:0 14px 40px -16px rgba(79,70,229,.28);
+    --shadow-sm:0 6px 18px -8px rgba(31,35,64,.14);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:"PingFang SC","Microsoft YaHei",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    color:var(--ink);
+    background:
+      radial-gradient(1100px 520px at 88% -8%, rgba(139,92,246,.10), transparent 58%),
+      radial-gradient(900px 480px at -8% 8%, rgba(6,182,212,.10), transparent 55%),
+      linear-gradient(180deg,#f7f8fd 0%,#eceffb);
+    background-attachment:fixed;
+    min-height:100vh;
+    line-height:1.6;
+    padding-bottom:0;
+    padding-left:232px;
+  }
+  .wrap{max-width:none;margin:0 auto;padding:0 32px}
+
+  .sidebar{position:fixed;left:0;top:0;bottom:0;width:232px;z-index:60;background:#fff;border-right:1px solid var(--line);display:flex;flex-direction:column;padding:20px 14px 18px}
+  .side-brand{display:flex;align-items:center;gap:10px;padding:4px 8px 18px;border-bottom:1px solid var(--line);margin-bottom:16px}
+  .side-brand .logo{width:38px;height:38px;border-radius:10px;flex:0 0 auto;display:grid;place-items:center;background:linear-gradient(135deg,#06b6d4,#10b981);color:#fff;box-shadow:0 4px 10px -4px rgba(16,185,129,.5)}
+  .side-brand b{display:block;font-size:14.5px;font-weight:800;color:var(--ink);line-height:1.25}
+  .side-brand small{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+  .menu{display:flex;flex-direction:column;gap:4px;flex:1;overflow-y:auto}
+  .menu-sep{height:1px;background:var(--line);margin:8px 4px}
+  .menu-item{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:11px;font-size:14px;font-weight:600;color:var(--sub);cursor:pointer;transition:.16s;border:1px solid transparent}
+  .menu-item .mi-ico{font-size:17px;width:22px;text-align:center;flex:0 0 auto}
+  .menu-item:hover{color:var(--primary);background:#f4f5ff}
+  .menu-item.active{color:var(--primary);background:linear-gradient(90deg,#eef0ff,#f7f5ff);border-color:#dfe3ff}
+  .side-status{margin-top:14px;padding:12px 8px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px;font-size:12.5px;color:var(--sub)}
+  .side-status .clock{font-variant-numeric:tabular-nums;font-weight:700;color:var(--ink);font-size:13px}
+  @media(max-width:900px){
+    body{padding-left:68px}
+    .sidebar{width:68px;padding:16px 8px}
+    .side-brand b,.side-brand small,.menu-item .label,.side-status{display:none}
+    .menu-item{justify-content:center;padding:10px 0}
+  }
+
+  main{padding:18px 0}
+  .page{display:none;animation:pageIn .4s ease}
+  .page.active{display:block}
+  @keyframes pageIn{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+
+  .sec-title{display:flex;align-items:center;gap:12px;margin-bottom:6px}
+  .sec-title .num{width:36px;height:36px;border-radius:11px;flex:0 0 auto;display:grid;place-items:center;color:#fff;font-weight:800;font-size:16px;background:linear-gradient(135deg,var(--primary),var(--violet));box-shadow:0 8px 18px -8px rgba(99,102,241,.7)}
+  .sec-title h2{font-size:24px;font-weight:800;letter-spacing:-.3px}
+  .sec-desc{color:var(--sub);margin:0 0 16px 48px;max-width:860px;font-size:14.5px}
+  .school-logo{width:84px;height:84px;border-radius:50%;object-fit:cover;object-position:center;flex:0 0 auto;background:#fff;border:2px solid #fff;box-shadow:0 8px 20px -8px rgba(31,35,64,.35)}
+  .sec-title .school-logo{margin-left:auto}
+  .hero-top{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;width:100%}
+  .hero-top .school-logo{position:absolute;top:0;right:0;width:88px;height:88px;border-color:rgba(255,255,255,.9)}
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow-sm);padding:18px}
+  .card h3{font-size:16px;font-weight:700;margin-bottom:4px}
+  .card .hint{color:var(--muted);font-size:13px;margin-bottom:12px}
+  .chart{width:100%;height:300px}
+
+  .hero{position:relative;overflow:hidden;border-radius:var(--radius);padding:16px 26px 20px;color:#fff;display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:20px;align-items:stretch;background:radial-gradient(600px 320px at 88% 0%, rgba(255,255,255,.16), transparent 55%),linear-gradient(135deg,#312e81 0%,#4f46e5 48%,#7c3aed 100%);background-size:100% 100%,300% 300%;box-shadow:var(--shadow);animation:heroFlow 14s ease infinite}
+  @media(max-width:900px){.hero{grid-template-columns:1fr}}
+  @keyframes heroFlow{0%,100%{background-position:0 0,0% 50%}50%{background-position:0 0,100% 50%}}
+  .hero::before{content:"";position:absolute;width:380px;height:380px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.20),transparent 62%);top:-90px;right:8%;z-index:0;animation:float 9s ease-in-out infinite;pointer-events:none}
+  .hero::after{content:"";position:absolute;inset:0;z-index:1;background-image:radial-gradient(rgba(255,255,255,.13) 1px,transparent 1px);background-size:24px 24px;opacity:.35;pointer-events:none;animation:gridDrift 22s linear infinite}
+  @keyframes float{0%,100%{transform:translateY(0) translateX(0)}50%{transform:translateY(-30px) translateX(-20px)}}
+  @keyframes gridDrift{to{background-position:24px 24px}}
+  .hero-left,.hero-right{position:relative;z-index:2}.hero-left{display:flex;flex-direction:column}
+  .badge{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);padding:7px 15px;border-radius:999px;font-size:13px;letter-spacing:.5px}
+  .hero h1{font-size:36px;font-weight:800;margin:8px 0 6px;letter-spacing:-.8px}
+  .hero h1 .accent{background:linear-gradient(90deg,#a5f3fc,#c4b5fd);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+  .hero p.lead{max-width:640px;color:rgba(255,255,255,.9);font-size:14px;margin-top:auto}
+  .hero-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-top:auto}
+  .hm{display:flex;align-items:center;justify-content:space-between;gap:12px;background:rgba(255,255,255,.13);border:1px solid rgba(255,255,255,.22);border-radius:12px;padding:13px 18px}
+  .hm .k{font-size:12px;color:rgba(255,255,255,.8)}
+  .hm .v{font-size:22px;font-weight:800;line-height:1}
+  .hm .v small{font-size:12px;font-weight:600;opacity:.85}
+  .hero-right{background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.16);border-radius:16px;padding:14px 18px 10px}
+  .hero-viz-head{display:flex;align-items:center;justify-content:space-between;font-size:13px;font-weight:700;margin-bottom:4px}
+  .viz-live{font-size:11px;color:#7dd3fc;display:inline-flex;align-items:center;gap:5px}
+  .viz-live::before{content:"";width:7px;height:7px;border-radius:50%;background:#7dd3fc;box-shadow:0 0 8px #7dd3fc;animation:pulse 1.6s infinite}
+
+  .func-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:22px 0}
+  @media(max-width:900px){.func-grid{grid-template-columns:repeat(2,1fr)}}
+  .func{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px;cursor:pointer;transition:.18s;text-align:left;position:relative;overflow:hidden}
+  .func:hover{transform:translateY(-4px);box-shadow:var(--shadow);border-color:#dfe3ff}
+  .func .fico{font-size:28px}
+  .func .ft{font-weight:800;font-size:16px;margin-top:10px}
+  .func .fd{font-size:12.5px;color:var(--sub);margin-top:4px}
+  .func .arrow{position:absolute;top:16px;right:16px;color:#c7cbe0;font-size:18px;transition:.2s}
+  .func:hover .arrow{color:var(--primary);transform:translateX(4px)}
+  .func::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--c,var(--primary))}
+
+  .sensor-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px}
+  @media(max-width:900px){.sensor-grid{grid-template-columns:repeat(2,1fr)}}
+  .sensor{border-radius:16px;padding:16px;border:1px solid var(--line);background:#fff;box-shadow:var(--shadow-sm);position:relative;overflow:hidden}
+  .sensor::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--c)}
+  .sensor .ico{font-size:22px}
+  .sensor .nm{font-size:12.5px;color:var(--sub);margin-top:6px}
+  .sensor .val{font-size:24px;font-weight:800;margin-top:2px;font-variant-numeric:tabular-nums}
+  .sensor .unit{font-size:12px;color:var(--muted);font-weight:500}
+  .sensor .bar{height:6px;border-radius:3px;background:#eef0f9;margin-top:12px;overflow:hidden}
+  .sensor .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--c),var(--c2));border-radius:3px;transition:.6s}
+  .sensor .spark{height:36px;margin-top:10px;border-top:1px dashed #f0f1f8;padding-top:8px}
+  .sensor .spark svg{display:block;width:100%;height:100%;overflow:visible}
+
+  .controls{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end}
+  .ctl{display:flex;flex-direction:column;gap:6px}
+  .ctl label{font-size:12px;font-weight:600;color:var(--sub)}
+  select{appearance:none;background:#fff;border:1px solid var(--line);border-radius:10px;padding:9px 34px 9px 12px;font-size:14px;color:var(--ink);cursor:pointer;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235b6080' stroke-width='2.4'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+  select:focus,input[type=range]:focus{outline:2px solid rgba(99,102,241,.35);outline-offset:1px}
+  .range-row{display:flex;align-items:center;gap:10px}
+  .range-row output{min-width:44px;font-weight:700;color:var(--primary);font-size:13px;font-variant-numeric:tabular-nums}
+  input[type=range]{width:140px;accent-color:var(--primary);cursor:pointer}
+  .btn{border:none;border-radius:12px;padding:11px 22px;font-size:14px;font-weight:700;cursor:pointer;transition:.18s;font-family:inherit}
+  .btn.primary{background:linear-gradient(135deg,var(--primary),var(--violet));color:#fff;box-shadow:0 8px 20px -8px rgba(99,102,241,.75)}
+  .btn.primary:hover{transform:translateY(-1px);box-shadow:0 12px 26px -8px rgba(99,102,241,.8)}
+  .btn.ghost{background:#fff;color:var(--primary);border:1px solid #dcdff7}
+  .btn.ghost:hover{background:#f0f1ff}
+  .btn:disabled{opacity:.45;cursor:not-allowed;transform:none!important;box-shadow:none!important}
+
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{padding:11px 12px;text-align:right;border-bottom:1px solid var(--line)}
+  th:first-child,td:first-child{text-align:left}
+  thead th{color:var(--sub);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.4px;background:#f7f8fd}
+  tbody tr:hover{background:#f8f9ff}
+  td.good{color:#059669;font-weight:700}
+  td.bad{color:var(--rose);font-weight:700}
+  td.mid{color:var(--amber);font-weight:700}
+
+  .conclusion{border-left:4px solid var(--primary);background:#eef0ff;border-radius:12px;padding:16px 18px;margin-top:18px;font-size:14px;color:#2a2f63}
+  .conclusion b{color:var(--primary-d)}
+  .principle{margin-top:14px}
+  .principle p{margin-bottom:8px;font-size:13.5px;color:var(--sub)}
+
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--sub);margin-bottom:8px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:10px;height:10px;border-radius:3px;display:inline-block}
+  .kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-top:16px}
+  @media(max-width:900px){.kpi{grid-template-columns:repeat(2,1fr)}}
+  .kpi .k{background:#f7f8fd;border:1px solid var(--line);border-radius:12px;padding:14px}
+  .kpi .kl{font-size:12px;color:var(--sub)}
+  .kpi .kv{font-size:21px;font-weight:800;color:var(--ink);font-variant-numeric:tabular-nums;margin-top:2px}
+
+  /* ===== 实时监测增强 ===== */
+  .status{display:flex;align-items:center;gap:14px;font-size:12.5px;color:var(--sub);white-space:nowrap}
+  .status .clock{font-variant-numeric:tabular-nums;font-weight:700;color:var(--ink);font-size:14px}
+  .live{display:inline-flex;align-items:center;gap:6px;font-weight:700;color:#059669}
+  .live .dot-pulse{width:8px;height:8px;border-radius:50%;background:#10b981;position:relative}
+  .live .dot-pulse::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid rgba(16,185,129,.5);animation:pulse 1.6s infinite}
+  @keyframes pulse{0%{transform:scale(.5);opacity:1}100%{transform:scale(1.7);opacity:0}}
+  .site-tag{background:#eef0ff;color:var(--primary);padding:4px 10px;border-radius:8px;font-weight:700}
+  .alertbar{display:none;align-items:center;gap:12px;margin-bottom:16px;padding:13px 18px;border-radius:14px;font-size:14px;font-weight:600;box-shadow:var(--shadow-sm)}
+  .alertbar.show{display:flex}
+  .alertbar.warn{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412}
+  .alertbar.crit{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}
+  .badge-aqi{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:800;color:#fff;vertical-align:2px;margin-left:4px}
+  .sensor .shead{display:flex;align-items:center;justify-content:space-between}
+  .sensor .on{font-size:11px;color:#059669;display:inline-flex;align-items:center;gap:5px}
+  .sensor .on i{width:6px;height:6px;border-radius:50%;background:#10b981}
+  .live-toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:16px 0}
+  .aqi-strip{display:flex;align-items:center;gap:16px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 18px;box-shadow:var(--shadow-sm)}
+  .aqi-strip .aqi-num{font-size:30px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+  .aqi-strip .aqi-label{font-size:13px;color:var(--sub);line-height:1.3}
+  .aqi-scale{display:flex;height:10px;border-radius:6px;overflow:hidden;flex:1}
+  .aqi-scale i{flex:1}
+  .vis-row{display:grid;grid-template-columns:360px 1fr;gap:16px;margin-top:16px}
+  @media(max-width:900px){.vis-row{grid-template-columns:1fr}}
+  .vis-row .chart{height:260px}
+  .sensor .val.pop{animation:numPop .45s ease}
+  @keyframes numPop{0%{transform:scale(1)}40%{transform:scale(1.13);color:var(--primary)}100%{transform:scale(1)}}
+  .aqi-strip .aqi-num{animation:aqiGlow 2.6s ease-in-out infinite}
+  @keyframes aqiGlow{0%,100%{filter:brightness(1)}50%{filter:brightness(1.3) drop-shadow(0 0 10px currentColor)}}
+  .duo-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+  @media(max-width:900px){.duo-grid{grid-template-columns:1fr}}
+
+  /* ===== AI 问答 ===== */
+  .ai-layout{display:grid;grid-template-columns:1fr 340px;gap:16px;align-items:stretch}
+  @media(max-width:1000px){.ai-layout{grid-template-columns:1fr}}
+  .ai-main{display:flex;flex-direction:column;min-width:0}
+  .ai-chat{height:calc(100vh - 240px);min-height:440px;overflow-y:auto;display:flex;flex-direction:column;gap:14px;padding:18px}
+  .ai-aside{display:flex;flex-direction:column;gap:16px;min-width:0}
+  .ai-aside .card{flex:1}
+  .ai-aside h4{font-size:13px;font-weight:700;margin-bottom:10px;color:var(--ink)}
+  .ai-fact{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f0f1f8;font-size:13px;color:var(--sub)}
+  .ai-fact:last-child{border-bottom:none}
+  .ai-fact .fico{font-size:18px}
+  .ai-fact b{color:var(--ink);display:block;font-size:13.5px}
+  .ai-fact small{color:var(--muted)}
+  .faq-item{padding:9px 12px;border-radius:10px;font-size:13px;color:var(--sub);cursor:pointer;transition:.15s}
+  .faq-item:hover{background:#f0f1ff;color:var(--primary)}
+  .ai-msg{display:flex;gap:10px;align-items:flex-start;animation:pageIn .25s ease}
+  .ai-msg.ai-user{flex-direction:row-reverse}
+  .ai-avatar{width:36px;height:36px;border-radius:11px;flex:0 0 auto;display:grid;place-items:center;background:linear-gradient(135deg,var(--primary),var(--violet));color:#fff;font-size:17px}
+  .ai-msg.ai-user .ai-avatar{background:#e6e9f5;color:#5b6080}
+  .ai-bubble{max-width:74%;padding:11px 14px;border-radius:15px;font-size:13.5px;line-height:1.65;background:#eef0f9;color:var(--ink)}
+  .ai-msg.ai-user .ai-bubble{background:linear-gradient(135deg,var(--primary),var(--violet));color:#fff;border-bottom-right-radius:5px}
+  .ai-msg.ai-bot .ai-bubble{border-bottom-left-radius:5px}
+  .ai-typing{display:inline-flex;gap:4px;padding:4px 2px}
+  .ai-typing i{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:typing 1s infinite}
+  .ai-typing i:nth-child(2){animation-delay:.15s}
+  .ai-typing i:nth-child(3){animation-delay:.3s}
+  @keyframes typing{0%,60%,100%{opacity:.25;transform:translateY(0)}30%{opacity:1;transform:translateY(-3px)}}
+  .ai-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .chip{background:#fff;border:1px solid #dcdff7;color:var(--primary);border-radius:999px;padding:7px 13px;font-size:12.5px;font-weight:600;cursor:pointer;transition:.16s}
+  .chip:hover{background:#f0f1ff}
+  .ai-input{display:flex;gap:10px;margin-top:12px}
+  .ai-input input{flex:1;border:1px solid var(--line);border-radius:12px;padding:11px 14px;font-size:14px;color:var(--ink);font-family:inherit}
+  .ai-input input:focus{outline:2px solid rgba(99,102,241,.35);outline-offset:1px}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="side-brand">
+    <span class="logo"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" stroke-dasharray="2.5 3" opacity=".55"></circle><circle cx="12" cy="12" r="5.5" opacity=".85"></circle><path d="M12 4.5V7M12 17v2.5M4.5 12H7M17 12h2.5" opacity=".6"></path><path d="M12 12l4.6-3.2"></path><circle cx="12" cy="12" r="1.8" fill="currentColor" stroke="none"></circle></svg></span>
+    <div><b>多传感器监测</b><small>空气质量分析平台</small></div>
+  </div>
+  <nav class="menu" id="steps">
+    <div class="menu-item active" data-goto="0"><span class="mi-ico">🛰️</span><span class="label">场景总览</span></div>
+    <div class="menu-item" data-goto="1"><span class="mi-ico">📊</span><span class="label">数据采集</span></div>
+    <div class="menu-item" data-goto="2"><span class="mi-ico">🧲</span><span class="label">滤波算法</span></div>
+    <div class="menu-item" data-goto="3"><span class="mi-ico">🔗</span><span class="label">融合算法</span></div>
+    <div class="menu-item" data-goto="4"><span class="mi-ico">📈</span><span class="label">结果分析</span></div>
+    <div class="menu-sep"></div>
+    <div class="menu-item" data-goto="5"><span class="mi-ico">🤖</span><span class="label">AI 智能问答</span></div>
+  </nav>
+  <div class="side-status">
+    <span class="live"><span class="dot-pulse"></span>在线</span>
+    <span class="site-tag">监测站 · CN-A-01</span>
+    <span class="clock" id="clock">--:--:--</span>
+  </div>
+</aside>
+
+<main>
+  <div class="wrap">
+
+    <!-- 页面1：场景 -->
+    <section class="page active" data-step="0">
+      <div class="hero">
+        <div class="hero-left">
+          <div class="hero-top">
+            <span class="badge">● LIVE · 城市空气质量监测站</span>
+            <img class="school-logo" src="logo.jpg" alt="中南林业科技大学校徽">
+          </div>
+          <h1><span class="accent">多传感器空气质量监测系统</span></h1>
+          <p class="lead">实时采集 PM2.5 · PM10 · CO₂ · 温湿度五类数据，<b>自适应卡尔曼滤波</b>去噪 + <b>三路冗余传感器</b>融合。</p>
+          <div class="hero-metrics">
+            <div class="hm"><div class="k">监测参数</div><div class="v">5 <small>类</small></div></div>
+            <div class="hm"><div class="k">滤波算法</div><div class="v">5 <small>种</small></div></div>
+            <div class="hm"><div class="k">融合算法</div><div class="v">3 <small>种</small></div></div>
+            <div class="hm"><div class="k">采样点数</div><div class="v" id="hmN">—</div></div>
+          </div>
+        </div>
+        <div class="hero-right">
+          <div class="hero-viz-head">实时多参数趋势<span class="viz-live">LIVE</span></div>
+          <div id="heroChart" style="width:100%;height:220px"></div>
+        </div>
+      </div>
+
+      <div class="alertbar" id="alertbar"><span id="alertText"></span></div>
+
+      <div class="aqi-strip">
+        <div class="aqi-label">实时<br>空气质量指数</div>
+        <div class="aqi-num" id="aqiNum">—</div>
+        <div class="aqi-label" id="aqiLevel">—</div>
+        <div class="aqi-scale">
+          <i style="background:#4ade80"></i><i style="background:#facc15"></i><i style="background:#fb923c"></i><i style="background:#f87171"></i><i style="background:#c084fc"></i><i style="background:#9f1239"></i>
+        </div>
+        <div class="live-toolbar" style="margin:0">
+          <button class="btn ghost" id="toggleBtn">暂停采集</button>
+          <button class="btn ghost" id="exportBtn">导出 CSV</button>
+          <button class="btn ghost" id="refreshBtn">刷新数据</button>
+        </div>
+      </div>
+
+      <div class="vis-row">
+        <div class="card" style="padding:18px 20px"><h3>实时 AQI 仪表盘</h3><div class="chart" id="gaugeChart"></div></div>
+        <div class="card" style="padding:18px 20px"><h3>PM2.5 · 24h 走势</h3><div class="chart" id="trendChart"></div></div>
+      </div>
+
+      <div class="func-grid">
+        <div class="func" style="--c:#38bdf8" data-goto="1"><span class="arrow">→</span><div class="fico">📊</div><div class="ft">数据采集</div><div class="fd">多参数含噪数据生成</div></div>
+        <div class="func" style="--c:#6366f1" data-goto="2"><span class="arrow">→</span><div class="fico">🧲</div><div class="ft">滤波算法</div><div class="fd">去噪与自适应卡尔曼</div></div>
+        <div class="func" style="--c:#8b5cf6" data-goto="3"><span class="arrow">→</span><div class="fico">🔗</div><div class="ft">数据融合</div><div class="fd">三路 PM2.5 冗余观测</div></div>
+        <div class="func" style="--c:#10b981" data-goto="4"><span class="arrow">→</span><div class="fico">📈</div><div class="ft">结果分析</div><div class="fd">定量指标对比评估</div></div>
+      </div>
+
+      <div class="sensor-grid">
+        <div class="sensor" style="--c:#f43f5e;--c2:#fb7185"><div class="ico">🫁</div><div class="nm">PM2.5</div><div class="val" id="sPM25">—</div><div class="unit">μg/m³</div><div class="bar"><i id="bPM25"></i></div><div class="spark" id="sparkPM25"></div></div>
+        <div class="sensor" style="--c:#f59e0b;--c2:#fbbf24"><div class="ico">🌫️</div><div class="nm">PM10</div><div class="val" id="sPM10">—</div><div class="unit">μg/m³</div><div class="bar"><i id="bPM10"></i></div><div class="spark" id="sparkPM10"></div></div>
+        <div class="sensor" style="--c:#8b5cf6;--c2:#c4b5fd"><div class="ico">🫧</div><div class="nm">CO₂</div><div class="val" id="sCO2">—</div><div class="unit">ppm</div><div class="bar"><i id="bCO2"></i></div><div class="spark" id="sparkCO2"></div></div>
+        <div class="sensor" style="--c:#06b6d4;--c2:#22d3ee"><div class="ico">🌡️</div><div class="nm">温度</div><div class="val" id="sTemp">—</div><div class="unit">℃</div><div class="bar"><i id="bTemp"></i></div><div class="spark" id="sparkTemp"></div></div>
+        <div class="sensor" style="--c:#38bdf8;--c2:#7dd3fc"><div class="ico">💧</div><div class="nm">湿度</div><div class="val" id="sHum">—</div><div class="unit">%RH</div><div class="bar"><i id="bHum"></i></div><div class="spark" id="sparkHum"></div></div>
+      </div>
+
+      <div class="card" style="padding:16px 22px">
+        <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;font-size:13.5px;color:var(--sub)">
+          <b style="color:var(--ink)">处理链路</b>
+          <span>原始数据</span><span style="color:#c7cbe0">→</span>
+          <span>滤波去噪</span><span style="color:#c7cbe0">→</span>
+          <span>融合估计</span><span style="color:#c7cbe0">→</span>
+          <span>质量评估</span>
+          <span style="margin-left:auto;color:var(--muted)">噪声模型：高斯白噪声 + 温漂</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 页面2：数据采集 -->
+    <section class="page" data-step="1">
+      <div class="sec-title"><span class="num">2</span><h2>数据采集与生成</h2><img class="school-logo" src="logo.jpg" alt="中南林业科技大学校徽"></div>
+      <p class="sec-desc">24 小时 · 600 采样点 · 各参数归一化对比昼夜变化。</p>
+      <div class="card">
+        <div class="legend">
+          <span><i class="dot" style="background:#10b981"></i>PM2.5 真值</span>
+          <span><i class="dot" style="background:#cbd5e1"></i>PM2.5 观测</span>
+          <span><i class="dot" style="background:#f59e0b"></i>PM10 真值</span>
+          <span><i class="dot" style="background:#8b5cf6"></i>CO₂ 真值</span>
+          <span><i class="dot" style="background:#f43f5e"></i>温度真值</span>
+          <span><i class="dot" style="background:#06b6d4"></i>湿度真值</span>
+        </div>
+        <div class="chart" id="chartData" style="height:360px"></div>
+      </div>
+
+      <div class="duo-grid">
+        <div class="card"><h3>温度—湿度相关性</h3><div class="chart" id="corrChart"></div></div>
+        <div class="card"><h3>PM2.5 观测值分布</h3><div class="chart" id="histChart"></div></div>
+      </div>
+    </section>
+
+    <!-- 页面3：滤波 -->
+    <section class="page" data-step="2">
+      <div class="sec-title"><span class="num">3</span><h2>滤波算法实现</h2><img class="school-logo" src="logo.jpg" alt="中南林业科技大学校徽"></div>
+      <p class="sec-desc">五种去噪算法对比；自适应卡尔曼在线估计噪声方差 R。</p>
+      <div class="card">
+        <div class="controls">
+          <div class="ctl"><label>监测参数</label>
+            <select id="channelSelect">
+              <option value="pm25" selected>PM2.5</option>
+              <option value="pm10">PM10</option>
+              <option value="co2">CO₂</option>
+              <option value="temp">温度</option>
+              <option value="hum">湿度</option>
+            </select>
+          </div>
+          <div class="ctl"><label>滤波算法</label>
+            <select id="filterSelect">
+              <option value="moving">滑动平均滤波</option>
+              <option value="median">中值滤波</option>
+              <option value="lowpass">一阶低通滤波</option>
+              <option value="kalman" selected>卡尔曼滤波</option>
+              <option value="adaptive">自适应卡尔曼滤波</option>
+            </select>
+          </div>
+          <div class="ctl" id="winCtl"><label>窗口大小</label>
+            <div class="range-row"><input type="range" id="win" min="3" max="31" step="2" value="11"><output id="winOut">11</output></div>
+          </div>
+          <div class="ctl" id="alphaCtl"><label>滤波系数 α</label>
+            <div class="range-row"><input type="range" id="alpha" min="0.05" max="0.95" step="0.05" value="0.3"><output id="alphaOut">0.30</output></div>
+          </div>
+          <div class="ctl" id="qCtl"><label>过程噪声 Q</label>
+            <div class="range-row"><input type="range" id="q" min="0.001" max="1" step="0.001" value="0.05"><output id="qOut">0.05</output></div>
+          </div>
+          <div class="ctl" id="rCtl"><label>测量噪声 R</label>
+            <div class="range-row"><input type="range" id="r" min="0.01" max="10" step="0.01" value="1.5"><output id="rOut">1.50</output></div>
+          </div>
+          <div class="ctl" id="betaCtl"><label>遗忘因子 β</label>
+            <div class="range-row"><input type="range" id="beta" min="0.01" max="0.5" step="0.01" value="0.1"><output id="betaOut">0.10</output></div>
+          </div>
+          <button class="btn primary" id="filterBtn">应用滤波</button>
+        </div>
+
+        <div class="legend" style="margin-top:16px">
+          <span><i class="dot" style="background:#cbd5e1"></i>原始观测</span>
+          <span><i class="dot" style="background:#10b981"></i>真实值</span>
+          <span><i class="dot" style="background:#f59e0b"></i>滤波后</span>
+        </div>
+        <div class="chart" id="chartFilter"></div>
+
+        <div class="kpi">
+          <div class="k"><div class="kl">原始 RMSE</div><div class="kv" id="kRawRMSE">—</div></div>
+          <div class="k"><div class="kl">滤波后 RMSE</div><div class="kv" id="kFltRMSE">—</div></div>
+          <div class="k"><div class="kl">原始 SNR(dB)</div><div class="kv" id="kRawSNR">—</div></div>
+          <div class="k"><div class="kl">滤波后 SNR(dB)</div><div class="kv" id="kFltSNR">—</div></div>
+        </div>
+
+        <div class="conclusion" id="filterNote"></div>
+        <div class="principle" id="filterPrinciple"></div>
+      </div>
+    </section>
+
+    <!-- 页面4：融合 -->
+    <section class="page" data-step="3">
+      <div class="sec-title"><span class="num">4</span><h2>多传感器数据融合</h2><img class="school-logo" src="logo.jpg" alt="中南林业科技大学校徽"></div>
+      <p class="sec-desc">三路 PM2.5（σ=4.0/6.0/1.5）冗余观测，三种融合算法对比。</p>
+      <div class="card">
+        <div class="controls">
+          <div class="ctl"><label>融合算法</label>
+            <select id="fusionSelect">
+              <option value="weighted" selected>方差倒数加权融合</option>
+              <option value="kalman">序贯卡尔曼融合</option>
+              <option value="adaptive">自适应卡尔曼融合</option>
+            </select>
+          </div>
+          <button class="btn ghost" id="fusionBtn">重新融合</button>
+        </div>
+
+        <div class="legend" style="margin-top:16px">
+          <span><i class="dot" style="background:#94a3b8"></i>传感器1（σ=4.0）</span>
+          <span><i class="dot" style="background:#7dd3fc"></i>传感器2（σ=6.0）</span>
+          <span><i class="dot" style="background:#c4b5fd"></i>传感器3（σ=1.5）</span>
+          <span><i class="dot" style="background:#10b981"></i>真实值</span>
+          <span><i class="dot" style="background:#f43f5e"></i>融合结果</span>
+        </div>
+        <div class="chart" id="chartFusion"></div>
+
+        <div class="kpi">
+          <div class="k"><div class="kl">融合前平均 RMSE</div><div class="kv" id="kFuRaw">—</div></div>
+          <div class="k"><div class="kl">融合后 RMSE</div><div class="kv" id="kFuPost">—</div></div>
+          <div class="k"><div class="kl">精度提升</div><div class="kv" id="kFuGain">—</div></div>
+          <div class="k"><div class="kl">等效噪声 σ</div><div class="kv" id="kFuSigma">—</div></div>
+        </div>
+
+        <div class="conclusion" id="fusionNote"></div>
+        <div class="principle" id="fusionPrinciple"></div>
+      </div>
+    </section>
+
+    <!-- 页面5：结果分析 -->
+    <section class="page" data-step="4">
+      <div class="sec-title"><span class="num">5</span><h2>结果分析与总结</h2><img class="school-logo" src="logo.jpg" alt="中南林业科技大学校徽"></div>
+      <p class="sec-desc">滤波与融合定量指标汇总（RMSE / MAE / SNR），动态计算。</p>
+      <div class="card">
+        <h3>滤波算法定量对比（PM2.5 通道）</h3>
+        <div class="hint">基于真实值计算；RMSE / MAE 越低越好，SNR 越高越好。</div>
+        <table>
+          <thead><tr><th>方法</th><th>RMSE</th><th>MAE</th><th>SNR(dB)</th><th>评价</th></tr></thead>
+          <tbody id="filtTbody"></tbody>
+        </table>
+        <h3 style="margin-top:24px">融合算法定量对比（三路 PM2.5）</h3>
+        <table>
+          <thead><tr><th>方法</th><th>RMSE</th><th>MAE</th><th>等效σ</th><th>精度提升</th></tr></thead>
+          <tbody id="fusTbody"></tbody>
+        </table>
+        <div class="conclusion">
+          综合结论：<b>自适应卡尔曼滤波</b>在噪声统计特性未知或时变的场景下表现最优，兼顾去噪与动态跟踪；<b>中值滤波</b>对脉冲异常值鲁棒性最好；<b>滑动平均/低通</b>实现简单但存在滞后。<b>多传感器融合</b>通过三路冗余观测显著降低等效测量噪声，估计精度明显优于任一单传感器。
+        </div>
+      </div>
+    </section>
+
+    <!-- 页面6：AI 问答 -->
+    <section class="page" data-step="5">
+      <div class="sec-title"><span class="num">6</span><h2>AI 智能问答</h2><img class="school-logo" src="logo.jpg" alt="中南林业科技大学校徽"></div>
+      <p class="sec-desc">针对系统与算法的即时问答助手。</p>
+      <div class="ai-layout">
+        <div class="ai-main">
+          <div class="card ai-chat" id="aiChat">
+            <div class="ai-msg ai-bot"><div class="ai-avatar">🤖</div><div class="ai-bubble">你好，我是本系统的智能助手。可以问我滤波算法、多传感器融合、AQI 等级等问题～</div></div>
+          </div>
+          <div class="ai-chips" id="aiChips">
+            <button class="chip">什么是自适应卡尔曼滤波？</button>
+            <button class="chip">多传感器融合有什么作用？</button>
+            <button class="chip">当前空气质量如何？</button>
+            <button class="chip">几种滤波算法怎么选？</button>
+          </div>
+          <div class="ai-input">
+            <input id="aiInput" placeholder="输入问题，回车发送…" autocomplete="off" />
+            <button class="btn primary" id="aiSend">发送</button>
+          </div>
+        </div>
+        <div class="ai-aside">
+          <div class="card">
+            <h4>系统能力</h4>
+            <div class="ai-fact"><span class="fico">📡</span><div><b>5 类参数</b><small>PM2.5 · PM10 · CO₂ · 温湿度</small></div></div>
+            <div class="ai-fact"><span class="fico">🧲</span><div><b>5 种滤波</b><small>滑动 / 中值 / 低通 / 卡尔曼 / 自适应</small></div></div>
+            <div class="ai-fact"><span class="fico">🔗</span><div><b>3 种融合</b><small>加权 / 序贯 / 自适应融合</small></div></div>
+            <div class="ai-fact"><span class="fico">📈</span><div><b>实时评估</b><small>RMSE · MAE · SNR 动态计算</small></div></div>
+          </div>
+          <div class="card">
+            <h4>常用问题</h4>
+            <div class="faq-item" data-q="什么是自适应卡尔曼滤波？">什么是自适应卡尔曼滤波？</div>
+            <div class="faq-item" data-q="多传感器融合有什么作用？">多传感器融合有什么作用？</div>
+            <div class="faq-item" data-q="当前空气质量如何？">当前空气质量如何？</div>
+            <div class="faq-item" data-q="几种滤波算法怎么选？">几种滤波算法怎么选？</div>
+            <div class="faq-item" data-q="介绍一下本系统">介绍一下本系统</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<script>
+/* ================= 数据生成 ================= */
+const N = 600;
+const HOURS = Array.from({length:N}, (_,i)=> i/(N-1)*24);
+function gauss(){let u=0,v=0;while(u===0)u=Math.random();while(v===0)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+
+// 真值（符合物理规律）
+function pm25Truth(h){ return 45 + 30*Math.exp(-((h-8)**2)/(2*1.5**2)) + 40*Math.exp(-((h-19)**2)/(2*2.0**2)) + 3*Math.sin(2*Math.PI*h/24+1); }
+function pm10Truth(h){ return 68 + 35*Math.exp(-((h-8.5)**2)/(2*1.5**2)) + 45*Math.exp(-((h-19)**2)/(2*2.2**2)) + 4*Math.sin(2*Math.PI*h/24); }
+function co2Truth(h){  return 500 + 320*Math.max(0,Math.sin(2*Math.PI*h/24 - Math.PI/2)) + 160*Math.exp(-((h-14)**2)/(2*1.2**2)); }
+function tempTruth(h){ return 25 + 4*Math.sin(2*Math.PI*(h-9)/24); }
+function humTruth(h){  return 65 - 18*Math.sin(2*Math.PI*(h-9)/24) + 3*Math.sin(2*Math.PI*h/6); }
+
+const truthFns = {pm25:pm25Truth, pm10:pm10Truth, co2:co2Truth, temp:tempTruth, hum:humTruth};
+const sigmaOf = {pm25:3.0, pm10:5.0, co2:20, temp:0.8, hum:2.0};
+const names = {pm25:'PM2.5', pm10:'PM10', co2:'CO₂', temp:'温度', hum:'湿度'};
+const units = {pm25:'μg/m³', pm10:'μg/m³', co2:'ppm', temp:'℃', hum:'%RH'};
+
+const truth = {}, raw = {};
+for(const key in truthFns){
+  truth[key]=[]; raw[key]=[];
+  for(let i=0;i<N;i++){
+    const h=HOURS[i], t=truthFns[key](h);
+    truth[key].push(t);
+    raw[key].push(t + sigmaOf[key]*gauss() + (sigmaOf[key]*0.4)*Math.sin(2*Math.PI*i/N*3));
+  }
+}
+
+// 三路 PM2.5 传感器（不同精度 + 漂移）
+function makeSensor(noise, driftAmp, driftFreq){
+  return truth.pm25.map((v,i)=> v + driftAmp*Math.sin(2*Math.PI*i/(N*driftFreq)) + noise*gauss());
+}
+const s1 = makeSensor(4.0, 1.5, 0.08);
+const s2 = makeSensor(6.0, 3.0, 0.05);
+const s3 = makeSensor(1.5, 0.6, 0.12);
+
+/* ================= 指标 ================= */
+function mean(a){return a.reduce((x,y)=>x+y,0)/a.length}
+function variance(a){const m=mean(a);return a.reduce((x,y)=>x+(y-m)*(y-m),0)/a.length}
+function rmse(e,r){return Math.sqrt(e.reduce((x,v,i)=>x+(v-r[i])*(v-r[i]),0)/e.length)}
+function mae(e,r){return e.reduce((x,v,i)=>x+Math.abs(v-r[i]),0)/e.length}
+function snr(sig,ref){const n=sig.map((v,i)=>v-ref[i]);return 10*Math.log10(variance(ref)/variance(n));}
+
+/* 数字滚动动画（count-up） */
+function countUp(el, target, {decimals=0, duration=800, suffix=''}={}){
+  if(!el) return;
+  const from=0, start=performance.now();
+  function step(now){
+    const p=Math.min(1,(now-start)/duration);
+    const e=1-Math.pow(1-p,3);
+    const v=from+(target-from)*e;
+    el.textContent=(decimals? v.toFixed(decimals) : Math.round(v).toString())+suffix;
+    if(p<1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+/* ================= 滤波算法 ================= */
+function movingAverage(x,win){const h=Math.floor(win/2),o=new Array(x.length);for(let i=0;i<x.length;i++){let s=0,c=0;for(let j=i-h;j<=i+h;j++){if(j>=0&&j<x.length){s+=x[j];c++}}o[i]=s/c;}return o;}
+function medianFilter(x,win){const h=Math.floor(win/2),o=new Array(x.length);for(let i=0;i<x.length;i++){const w=[];for(let j=i-h;j<=i+h;j++){if(j>=0&&j<x.length)w.push(x[j])}w.sort((a,b)=>a-b);o[i]=w.length%2?w[(w.length-1)/2]:(w[w.length/2-1]+w[w.length/2])/2;}return o;}
+function lowpass(x,alpha){let y=x[0];const o=new Array(x.length);for(let i=0;i<x.length;i++){y=alpha*x[i]+(1-alpha)*y;o[i]=y;}return o;}
+function kalman(x,Q,R){let e=x[0],P=1;const o=new Array(x.length);for(let i=0;i<x.length;i++){P+=Q;const K=P/(P+R);e=e+K*(x[i]-e);P=(1-K)*P;o[i]=e;}return o;}
+// 自适应卡尔曼：基于新息序列在线估计 R
+function adaptiveKalman(x,Q,beta,Rmin){let e=x[0],P=1,C=1;const o=new Array(x.length);for(let i=0;i<x.length;i++){P+=Q;const v=x[i]-e;C=(1-beta)*C+beta*v*v;const R=Math.max(C-P,Rmin);const K=P/(P+R);e=e+K*v;P=(1-K)*P;o[i]=e;}return o;}
+
+/* ================= 融合算法 ================= */
+function weightedFusion(sensors){const m=sensors.length,n=sensors[0].length;const v=sensors.map(variance);const w=v.map(x=>1/x),sw=w.reduce((a,b)=>a+b,0);const o=new Array(n);for(let i=0;i<n;i++){let s=0;for(let j=0;j<m;j++)s+=w[j]*sensors[j][i];o[i]=s/sw;}return {out:o,sigma:Math.sqrt(1/sw)};}
+function kalmanFusion(sensors,R){const m=sensors.length,n=sensors[0].length;let e=mean(sensors.map(s=>s[0])),P=1,Q=0.01;const o=new Array(n);for(let i=0;i<n;i++){P+=Q;for(let j=0;j<m;j++){const K=P/(P+R[j]);e=e+K*(sensors[j][i]-e);P=(1-K)*P;}o[i]=e;}return o;}
+function adaptiveKalmanFusion(sensors,R,beta,Rmin){const m=sensors.length,n=sensors[0].length;let e=mean(sensors.map(s=>s[0])),P=1,Q=0.01;const C=new Array(m).fill(1);const o=new Array(n);for(let i=0;i<n;i++){P+=Q;for(let j=0;j<m;j++){const v=sensors[j][i]-e;C[j]=(1-beta)*C[j]+beta*v*v;const Rj=Math.max(C[j]-P,Rmin[j]);const K=P/(P+Rj);e=e+K*v;P=(1-K)*P;}o[i]=e;}return o;}
+
+/* ================= ECharts ================= */
+const axisStyle={axisLine:{lineStyle:{color:'#e2e5f2'}},axisLabel:{color:'#5b6080',fontSize:11},splitLine:{lineStyle:{color:'#eef0f9'}}};
+function baseOpt(series){
+  series.s.forEach((s,i)=>{ if(s.animationDelay==null) s.animationDelay=i*160; });
+  return {animationDuration:1300,animationEasing:'cubicOut',grid:{left:52,right:16,top:40,bottom:46},tooltip:{trigger:'axis',backgroundColor:'#fff',borderColor:'#e6e8f4',textStyle:{color:'#1f2340',fontSize:12}},legend:{top:0,right:0,itemWidth:14,itemHeight:8,textStyle:{color:'#5b6080',fontSize:11}},xAxis:{type:'category',name:'时间(h)',data:series.x,boundaryGap:false,...axisStyle},yAxis:{type:'value',scale:true,...axisStyle,splitNumber:4,name:series.unit},series:series.s};
+}
+function line(name,data,color,width=1.5){return {name,type:'line',data,smooth:true,symbol:'none',lineStyle:{color,width},itemStyle:{color},emphasis:{focus:'series'}};}
+
+const chartMap=new Map();
+function initChart(id){const el=document.getElementById(id);const c=echarts.init(el);chartMap.set(el,c);return c;}
+const dataChart=initChart('chartData');
+const filterChart=initChart('chartFilter');
+const fusionChart=initChart('chartFusion');
+const gaugeChart=initChart('gaugeChart');
+const trendChart=initChart('trendChart');
+const heroChart=initChart('heroChart');
+
+const xAxis=HOURS.map(h=>h.toFixed(1));
+
+// 数据采集页（归一化展示）
+function norm(a){const mn=Math.min(...a), mx=Math.max(...a);return a.map(v=>(v-mn)/((mx-mn)||1));}
+function renderDataCharts(){
+  dataChart.clear();
+  dataChart.setOption(baseOpt({
+    x:xAxis, unit:'归一化',
+    s:[
+      line('PM2.5 真值', norm(truth.pm25), '#10b981', 2.2),
+      line('PM2.5 观测', norm(raw.pm25), '#cbd5e1', 1.1),
+      line('PM10 真值', norm(truth.pm10), '#f59e0b', 1.6),
+      line('CO₂ 真值', norm(truth.co2), '#8b5cf6', 1.6),
+      line('温度真值', norm(truth.temp), '#f43f5e', 1.6),
+      line('湿度真值', norm(truth.hum), '#06b6d4', 1.6)
+    ]
+  }));
+  // 限制归一化轴范围
+  dataChart.setOption({yAxis:{min:0,max:1.05}});
+}
+renderDataCharts();
+document.getElementById('hmN').textContent = N;
+
+function setVal(vId,bId,v,min,max){
+  document.getElementById(vId).textContent = v.toFixed(1);
+  const p=Math.min(100,Math.max(0,(v-min)/(max-min)*100));
+  document.getElementById(bId).style.width=p+'%';
+}
+
+/* ===== Sparkline 迷你趋势 ===== */
+const sparkBufs={pm25:[],pm10:[],co2:[],temp:[],hum:[]};
+const sparkColors={pm25:'#f43f5e',pm10:'#f59e0b',co2:'#8b5cf6',temp:'#06b6d4',hum:'#38bdf8'};
+const sparkId={pm25:'PM25',pm10:'PM10',co2:'CO2',temp:'Temp',hum:'Hum'};
+function sparkSVG(buf,color){
+  const w=120,h=34,p=1.5,n=buf.length;
+  if(n<2) return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"></svg>';
+  const min=Math.min(...buf),max=Math.max(...buf),rng=(max-min)||1;
+  let d='';
+  for(let i=0;i<n;i++){
+    const x=p+(w-2*p)*i/(n-1), y=h-p-(buf[i]-min)/rng*(h-2*p);
+    d+=(i?' L':'M')+x.toFixed(1)+' '+y.toFixed(1);
+  }
+  return '<svg viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none"><path d="'+d+'" fill="none" stroke="'+color+'" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+function renderSparklines(){
+  for(const key in sparkId){
+    const el=document.getElementById('spark'+sparkId[key]);
+    if(el) el.innerHTML=sparkSVG(sparkBufs[key],sparkColors[key]);
+  }
+}
+
+/* ===== Hero 迷你实时趋势 ===== */
+const heroBuf={pm25:[],pm10:[],co2:[]};
+function pushHero(){
+  const i=liveIdx;
+  ['pm25','pm10','co2'].forEach(k=>{const b=heroBuf[k];b.push(raw[k][i]);if(b.length>60)b.shift();});
+}
+function renderHeroChart(){
+  heroChart.setOption({
+    animationDuration:400,
+    grid:{left:8,right:8,top:26,bottom:8},
+    tooltip:{trigger:'axis',backgroundColor:'rgba(31,35,64,.92)',borderColor:'transparent',textStyle:{color:'#fff',fontSize:11}},
+    legend:{top:0,right:0,itemWidth:12,itemHeight:7,textStyle:{color:'rgba(255,255,255,.85)',fontSize:10}},
+    xAxis:{type:'category',show:false,boundaryGap:false,data:heroBuf.pm25.map((_,i)=>i)},
+    yAxis:{type:'value',show:false,min:0,max:1.05},
+    series:[
+      {name:'PM2.5',type:'line',data:norm(heroBuf.pm25),smooth:true,symbol:'none',lineStyle:{color:'#7dd3fc',width:1.6},areaStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'rgba(125,211,252,.42)'},{offset:1,color:'rgba(125,211,252,0)'}])}},
+      {name:'PM10',type:'line',data:norm(heroBuf.pm10),smooth:true,symbol:'none',lineStyle:{color:'#fbbf24',width:1.5}},
+      {name:'CO₂',type:'line',data:norm(heroBuf.co2),smooth:true,symbol:'none',lineStyle:{color:'#c4b5fd',width:1.5}}
+    ]
+  });
+}
+
+/* ===== 实时监测引擎 ===== */
+const LEVELS=['优','良','轻度污染','中度污染','重度污染','严重污染'];
+const LEVEL_COLORS=['#059669','#ca8a04','#ea580c','#dc2626','#9333ea','#7f1d1d'];
+function pm25ToAQI(c){
+  const bp=[0,35,75,115,150,250,500];
+  const bi=[0,50,100,150,200,300,500];
+  if(c<=0) return {a:0,level:0,color:LEVEL_COLORS[0]};
+  for(let i=1;i<bp.length;i++){
+    if(c<=bp[i]){
+      const a=((bi[i]-bi[i-1])/(bp[i]-bp[i-1]))*(c-bp[i-1])+bi[i-1];
+      return {a:Math.round(a),level:i,color:LEVEL_COLORS[i-1]};
+    }
+  }
+  return {a:500,level:5,color:LEVEL_COLORS[5]};
+}
+const sensorEls=[...document.querySelectorAll('.sensor')];
+sensorEls.forEach((el,i)=>{
+  el.style.position='relative';
+  el.insertAdjacentHTML('afterbegin','<span class="on" style="position:absolute;top:13px;right:13px;font-size:11px;color:#059669;display:inline-flex;align-items:center;gap:5px"><i style="width:6px;height:6px;border-radius:50%;background:#10b981"></i>在线</span>');
+  if(i===0||i===1){
+    el.querySelector('.nm').insertAdjacentHTML('beforeend','<span class="badge-aqi" id="aqiBadge'+i+'" style="background:#059669">—</span>');
+  }
+});
+
+let liveIdx=N-1, livePaused=false, liveTimer=null;
+function renderLive(){
+  const i=liveIdx;
+  setVal('sPM25','bPM25', raw.pm25[i], 0, 120);
+  setVal('sPM10','bPM10', raw.pm10[i], 0, 160);
+  setVal('sCO2','bCO2', raw.co2[i], 400, 1000);
+  setVal('sTemp','bTemp', raw.temp[i], 18, 34);
+  setVal('sHum','bHum', raw.hum[i], 30, 90);
+  const pm25=raw.pm25[i];
+  const q1=pm25ToAQI(pm25), q2=pm25ToAQI(raw.pm10[i]);
+  const b0=document.getElementById('aqiBadge0'), b1=document.getElementById('aqiBadge1');
+  if(b0){b0.textContent=LEVELS[q1.level]; b0.style.background=q1.color;}
+  if(b1){b1.textContent=LEVELS[q2.level]; b1.style.background=q2.color;}
+  const aqiNum=document.getElementById('aqiNum'), aqiLevel=document.getElementById('aqiLevel');
+  aqiNum.textContent=q1.a; aqiNum.style.color=q1.color;
+  aqiLevel.innerHTML='<b style="color:'+q1.color+'">'+LEVELS[q1.level]+'</b><br><small style="color:#5b6080">首要污染物 PM2.5 · '+pm25.toFixed(1)+' μg/m³</small>';
+  const bar=document.getElementById('alertbar'), txt=document.getElementById('alertText');
+  if(q1.level>=2){
+    bar.className='alertbar show '+(q1.level>=4?'crit':'warn');
+    txt.textContent='空气质量提醒：当前 PM2.5 达到「'+LEVELS[q1.level]+'」等级，建议敏感人群减少户外活动。';
+  } else {
+    bar.className='alertbar';
+  }
+  ['pm25','pm10','co2','temp','hum'].forEach(key=>{const b=sparkBufs[key];b.push(raw[key][i]);if(b.length>40)b.shift();});
+  renderSparklines();
+  renderGauge(q1);
+  renderTrendMark(i);
+  pushHero();
+  renderHeroChart();
+  const pv=document.getElementById('sPM25');
+  if(pv){pv.classList.remove('pop');void pv.offsetWidth;pv.classList.add('pop');}
+}
+
+function renderGauge(q){
+  gaugeChart.setOption({
+    series:[{
+      type:'gauge',min:0,max:500,radius:'92%',center:['50%','56%'],
+      startAngle:220,endAngle:-40,
+      progress:{show:true,width:14,roundCap:true,itemStyle:{color:q.color}},
+      axisLine:{lineStyle:{width:14,color:[[0.1,'#4ade80'],[0.2,'#facc15'],[0.3,'#fb923c'],[0.4,'#f87171'],[0.6,'#c084fc'],[1,'#9f1239']]}},
+      pointer:{show:false},
+      axisTick:{show:false},splitLine:{show:false},axisLabel:{show:false},
+      detail:{valueAnimation:true,offsetCenter:[0,'30%'],fontSize:34,fontWeight:800,color:q.color,formatter:'{value}'},
+      title:{offsetCenter:[0,'62%'],fontSize:13,color:'#5b6080'},
+      data:[{value:q.a,name:'AQI 指数'}]
+    }]
+  });
+}
+function renderTrendFull(){
+  trendChart.setOption({
+    grid:{left:52,right:20,top:38,bottom:46},
+    tooltip:{trigger:'axis',backgroundColor:'#fff',borderColor:'#e6e8f4',textStyle:{color:'#1f2340',fontSize:12}},
+    legend:{top:0,right:0,itemWidth:14,itemHeight:8,textStyle:{color:'#5b6080',fontSize:11}},
+    xAxis:{type:'category',name:'时间(h)',data:xAxis,boundaryGap:false,...axisStyle},
+    yAxis:{type:'value',scale:true,...axisStyle,name:'μg/m³'},
+    series:[
+      line('PM2.5 真值',truth.pm25,'#10b981',2),
+      {name:'PM2.5 观测',type:'line',data:raw.pm25,smooth:true,symbol:'none',lineStyle:{color:'#cbd5e1',width:1.1},itemStyle:{color:'#cbd5e1'},
+        markLine:{silent:true,symbol:'none',animation:false,lineStyle:{color:'#6366f1',type:'dashed',width:1.4},label:{show:true,formatter:'实时',color:'#fff',backgroundColor:'#6366f1',padding:[2,6],borderRadius:4,fontSize:11},data:[{xAxis:xAxis[0]}]},
+        markPoint:{silent:true,symbol:'circle',symbolSize:8,itemStyle:{color:'#6366f1',borderColor:'#fff',borderWidth:2},data:[{coord:[xAxis[0],raw.pm25[0]]}]}}
+    ]
+  });
+}
+function renderTrendMark(i){
+  trendChart.setOption({
+    series:[
+      {},
+      {markLine:{data:[{xAxis:xAxis[i]}]},markPoint:{data:[{coord:[xAxis[i],raw.pm25[i]]}]}}
+    ]
+  });
+}
+renderTrendFull();
+renderLive();
+liveTimer=setInterval(()=>{ if(!livePaused){ liveIdx=(liveIdx+1)%N; renderLive(); } },1000);
+
+function tick(){ const d=new Date(); const p=n=>String(n).padStart(2,'0'); document.getElementById('clock').textContent=d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds()); }
+tick(); setInterval(tick,1000);
+
+document.getElementById('toggleBtn').addEventListener('click',function(){ livePaused=!livePaused; this.textContent=livePaused?'开始采集':'暂停采集'; this.style.color=livePaused?'#059669':''; });
+document.getElementById('refreshBtn').addEventListener('click',()=>{ liveIdx=N-1; renderLive(); });
+document.getElementById('exportBtn').addEventListener('click',function(){
+  let s='时刻,PM2.5,PM10,CO2,温度,湿度\n';
+  for(let i=0;i<N;i++){ s+=HOURS[i].toFixed(2)+','+raw.pm25[i].toFixed(2)+','+raw.pm10[i].toFixed(2)+','+raw.co2[i].toFixed(2)+','+raw.temp[i].toFixed(2)+','+raw.hum[i].toFixed(2)+'\n'; }
+  const blob=new Blob([s],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='空气质量监测数据_CN-A-01.csv'; a.click(); URL.revokeObjectURL(a.href);
+});
+
+/* ================= 滤波页 ================= */
+const channelSelect=document.getElementById('channelSelect');
+const filterSelect=document.getElementById('filterSelect');
+const winInput=document.getElementById('win');
+const alphaInput=document.getElementById('alpha');
+const qInput=document.getElementById('q');
+const rInput=document.getElementById('r');
+const betaInput=document.getElementById('beta');
+const FILTER_INFO={
+  moving:{principle:'窗口内样本算术平均，抑制高频白噪声；窗口越大越平滑、滞后越明显。'},
+  median:{principle:'以窗口内中位数替代当前值，对脉冲型异常值鲁棒。'},
+  lowpass:{principle:'y[n]=α·x[n]+(1−α)·y[n−1]，α 越小越平滑、响应越慢。'},
+  kalman:{principle:'预测—更新递推，以卡尔曼增益在模型与测量间动态折中。'},
+  adaptive:{principle:'基于新息序列在线估计 R：R̂=max(Ĉ−P⁻,Rmin)，噪声未知/时变时保持最优。'}
+};
+function syncFilterUI(){
+  const f=filterSelect.value;
+  document.getElementById('winCtl').style.display = (f==='moving'||f==='median')?'':'none';
+  document.getElementById('alphaCtl').style.display = (f==='lowpass')?'':'none';
+  document.getElementById('qCtl').style.display = (f==='kalman'||f==='adaptive')?'':'none';
+  document.getElementById('rCtl').style.display = (f==='kalman')?'':'none';
+  document.getElementById('betaCtl').style.display = (f==='adaptive')?'':'none';
+}
+function applyFilter(){
+  const ch=channelSelect.value, f=filterSelect.value;
+  const T=truth[ch], R=raw[ch];
+  let out;
+  if(f==='moving') out=movingAverage(R,+winInput.value);
+  else if(f==='median') out=medianFilter(R,+winInput.value);
+  else if(f==='lowpass') out=lowpass(R,+alphaInput.value);
+  else if(f==='kalman') out=kalman(R,+qInput.value,+rInput.value);
+  else out=adaptiveKalman(R,+qInput.value,+betaInput.value, sigmaOf[ch]*0.05);
+
+  filterChart.setOption(baseOpt({
+    x:xAxis, unit:units[ch],
+    s:[line('真实值',T,'#10b981',2),line('原始观测',R,'#cbd5e1',1.1),line('滤波后',out,'#f59e0b',2)]
+  }),true);
+
+  const r0=rmse(R,T), r1=rmse(out,T), snr0=snr(R,T), snr1=snr(out,T);
+  countUp(document.getElementById('kRawRMSE'), r0, {decimals:3});
+  countUp(document.getElementById('kFltRMSE'), r1, {decimals:3});
+  countUp(document.getElementById('kRawSNR'), snr0, {decimals:1});
+  countUp(document.getElementById('kFltSNR'), snr1, {decimals:1});
+  document.getElementById('filterNote').innerHTML=
+    names[ch]+' 通道「'+filterSelect.options[filterSelect.selectedIndex].text+'」：RMSE 由 <b>'+r0.toFixed(3)+'</b> 降至 <b>'+r1.toFixed(3)+'</b>，精度提升 <b>'+((r0-r1)/r0*100).toFixed(1)+'%</b>。';
+  document.getElementById('filterPrinciple').innerHTML='<p><b>实现原理</b>：'+FILTER_INFO[f].principle+'</p>';
+}
+channelSelect.addEventListener('change',applyFilter);
+filterSelect.addEventListener('change',()=>{syncFilterUI();applyFilter();});
+winInput.addEventListener('input',()=>{document.getElementById('winOut').value=winInput.value;applyFilter();});
+alphaInput.addEventListener('input',()=>{document.getElementById('alphaOut').value=(+alphaInput.value).toFixed(2);applyFilter();});
+qInput.addEventListener('input',()=>{document.getElementById('qOut').value=qInput.value;applyFilter();});
+rInput.addEventListener('input',()=>{document.getElementById('rOut').value=rInput.value;applyFilter();});
+betaInput.addEventListener('input',()=>{document.getElementById('betaOut').value=betaInput.value;applyFilter();});
+document.getElementById('filterBtn').addEventListener('click',applyFilter);
+syncFilterUI(); applyFilter();
+
+/* ================= 融合页 ================= */
+const fusionSelect=document.getElementById('fusionSelect');
+function applyFusion(){
+  const f=fusionSelect.value;
+  let fused,sigma,name;
+  if(f==='weighted'){const r=weightedFusion([s1,s2,s3]);fused=r.out;sigma=r.sigma;name='方差倒数加权融合';}
+  else if(f==='kalman'){fused=kalmanFusion([s1,s2,s3],[16,36,2.25]);sigma=Math.sqrt(variance(fused.map((v,i)=>v-truth.pm25[i])));name='序贯卡尔曼融合';}
+  else{fused=adaptiveKalmanFusion([s1,s2,s3],[16,36,2.25],0.2,[0.5,1.0,0.3]);sigma=Math.sqrt(variance(fused.map((v,i)=>v-truth.pm25[i])));name='自适应卡尔曼融合';}
+
+  fusionChart.setOption(baseOpt({
+    x:xAxis, unit:'μg/m³',
+    s:[
+      line('传感器1',s1,'#94a3b8',1),line('传感器2',s2,'#7dd3fc',1),line('传感器3',s3,'#c4b5fd',1),
+      line('真实值',truth.pm25,'#10b981',2.2),line('融合结果',fused,'#f43f5e',2.2)
+    ]
+  }),true);
+
+  const rs=[rmse(s1,truth.pm25),rmse(s2,truth.pm25),rmse(s3,truth.pm25)];
+  const avgRaw=mean(rs), post=rmse(fused,truth.pm25);
+  countUp(document.getElementById('kFuRaw'), avgRaw, {decimals:3});
+  countUp(document.getElementById('kFuPost'), post, {decimals:3});
+  countUp(document.getElementById('kFuGain'), (avgRaw-post)/avgRaw*100, {decimals:1, suffix:'%'});
+  countUp(document.getElementById('kFuSigma'), sigma, {decimals:3});
+  document.getElementById('fusionNote').innerHTML=
+    name+' 将三路冗余 PM2.5 观测融合后，平均 RMSE 由 <b>'+avgRaw.toFixed(3)+'</b> 降至 <b>'+post.toFixed(3)+'</b>，精度提升 <b>'+((avgRaw-post)/avgRaw*100).toFixed(1)+'%</b>，等效测量噪声标准差约 <b>'+sigma.toFixed(2)+' μg/m³</b>，优于任一单传感器。';
+  const p=FUSION_INFO[f];
+  document.getElementById('fusionPrinciple').innerHTML='<p><b>实现原理</b>：'+p+'</p>';
+}
+const FUSION_INFO={
+  weighted:'按方差倒数分配权重 wᵢ=1/σᵢ²，精度越高权重越大，最小方差无偏估计。',
+  kalman:'多路观测依次作为卡尔曼更新量逐一融合，按 R 动态分配增益。',
+  adaptive:'序贯融合基础上在线估计各传感器 R，提升噪声未知场景的融合鲁棒性。'
+};
+fusionSelect.addEventListener('change',applyFusion);
+document.getElementById('fusionBtn').addEventListener('click',applyFusion);
+applyFusion();
+
+/* ================= 结果分析页（动态计算） ================= */
+function buildSummary(){
+  const T=truth.pm25, R=raw.pm25;
+  const filterRows=[
+    ['原始观测', R],
+    ['滑动平均 (w=11)', movingAverage(R,11)],
+    ['中值滤波 (w=11)', medianFilter(R,11)],
+    ['一阶低通 (α=0.3)', lowpass(R,0.3)],
+    ['卡尔曼滤波', kalman(R,0.05,1.5)],
+    ['自适应卡尔曼', adaptiveKalman(R,0.05,0.1,0.15)],
+  ];
+  const ftb=document.getElementById('filtTbody'); ftb.innerHTML='';
+  filterRows.forEach(([nm,arr])=>{
+    const r=rmse(arr,T), m=mae(arr,T), s=snr(arr,T);
+    const tag = r<0.8?'<td class="good">优</td>':(r<1.6?'<td class="mid">良</td>':'<td class="bad">差</td>');
+    ftb.innerHTML+=`<tr><td>${nm}</td><td>${r.toFixed(3)}</td><td>${m.toFixed(3)}</td><td>${s.toFixed(1)}</td>${tag}</tr>`;
+  });
+  const fusRows=[
+    ['单传感器平均', null],
+    ['方差倒数加权融合', weightedFusion([s1,s2,s3]).out],
+    ['序贯卡尔曼融合', kalmanFusion([s1,s2,s3],[16,36,2.25])],
+    ['自适应卡尔曼融合', adaptiveKalmanFusion([s1,s2,s3],[16,36,2.25],0.2,[0.5,1.0,0.3])],
+  ];
+  const baseR=mean([rmse(s1,T),rmse(s2,T),rmse(s3,T)]);
+  const ftb2=document.getElementById('fusTbody'); ftb2.innerHTML='';
+  fusRows.forEach(([nm,arr])=>{
+    if(nm==='单传感器平均'){
+      const sgm=Math.sqrt(mean([16,36,2.25]));
+      ftb2.innerHTML+=`<tr><td>${nm}</td><td>${baseR.toFixed(3)}</td><td>${mae(s1,T).toFixed(3)}</td><td>${sgm.toFixed(2)}</td><td>—</td></tr>`;
+      return;
+    }
+    const r=rmse(arr,T), m=mae(arr,T), sg=Math.sqrt(variance(arr.map((v,i)=>v-T[i])));
+    const gain=((baseR-r)/baseR*100).toFixed(1)+'%';
+    ftb2.innerHTML+=`<tr><td>${nm}</td><td>${r.toFixed(3)}</td><td>${m.toFixed(3)}</td><td>${sg.toFixed(2)}</td><td class="good">${gain}</td></tr>`;
+  });
+}
+buildSummary();
+
+/* ===== 数据采集页补充图表：相关性 + 分布 ===== */
+const corrChart=initChart('corrChart');
+const histChart=initChart('histChart');
+function renderCorr(){
+  corrChart.setOption({
+    animationDuration:1400,animationEasing:'cubicOut',
+    grid:{left:46,right:18,top:30,bottom:42},
+    tooltip:{trigger:'item',formatter:p=>'温度 '+p.value[0]+'℃ · 湿度 '+p.value[1]+'%'},
+    xAxis:{type:'value',name:'温度(℃)',scale:true,axisLine:{lineStyle:{color:'#e2e5f2'}},axisLabel:{color:'#5b6080',fontSize:11},splitLine:{lineStyle:{color:'#eef0f9'}}},
+    yAxis:{type:'value',name:'湿度(%RH)',scale:true,axisLine:{lineStyle:{color:'#e2e5f2'}},axisLabel:{color:'#5b6080',fontSize:11},splitLine:{lineStyle:{color:'#eef0f9'}}},
+    series:[{
+      type:'scatter',symbolSize:6,
+      data:truth.temp.map((t,i)=>[+t.toFixed(1),+truth.hum[i].toFixed(1)]),
+      itemStyle:{color:new echarts.graphic.LinearGradient(0,0,1,0,[{offset:0,color:'#06b6d4'},{offset:1,color:'#8b5cf6'}]),opacity:.5}
+    }]
+  }, true);
+}
+function renderHist(){
+  const d=raw.pm25, bins=16;
+  const min=Math.min(...d), max=Math.max(...d), step=(max-min)/bins;
+  const counts=new Array(bins).fill(0);
+  d.forEach(v=>{const i=Math.min(bins-1,Math.floor((v-min)/step));counts[i]++;});
+  const cats=counts.map((_,i)=>(min+i*step).toFixed(0));
+  histChart.setOption({
+    animationDuration:900,animationEasing:'elasticOut',
+    grid:{left:40,right:14,top:30,bottom:36},
+    tooltip:{trigger:'axis',axisPointer:{type:'shadow'}},
+    xAxis:{type:'category',data:cats,name:'μg/m³',axisLine:{lineStyle:{color:'#e2e5f2'}},axisLabel:{color:'#5b6080',fontSize:10},splitLine:{show:false}},
+    yAxis:{type:'value',name:'频次',axisLine:{lineStyle:{color:'#e2e5f2'}},axisLabel:{color:'#5b6080',fontSize:11},splitLine:{lineStyle:{color:'#eef0f9'}}},
+    series:[{type:'bar',data:counts,barWidth:'72%',animationDelay:idx=>idx*50,itemStyle:{color:new echarts.graphic.LinearGradient(0,0,0,1,[{offset:0,color:'#8b5cf6'},{offset:1,color:'#6366f1'}]),borderRadius:[5,5,0,0]}}]
+  }, true);
+}
+renderCorr();
+renderHist();
+
+/* ================= 分页导航 ================= */
+const pages=[...document.querySelectorAll('.page')];
+const steps=[...document.querySelectorAll('.menu-item')];
+let cur=0;
+const pageReplayers={
+  1:()=>{renderDataCharts();renderCorr();renderHist();},
+  2:()=>applyFilter(),
+  3:()=>applyFusion()
+};
+function goTo(i){
+  cur=Math.max(0,Math.min(pages.length-1,i));
+  pages.forEach((p,idx)=>p.classList.toggle('active',idx===cur));
+  steps.forEach((s,idx)=>s.classList.toggle('active',idx===cur));
+  window.scrollTo({top:0,behavior:'smooth'});
+  requestAnimationFrame(()=>{
+    pages[cur].querySelectorAll('.chart').forEach(el=>{const c=chartMap.get(el);if(c)c.resize();});
+    if(pageReplayers[cur]) pageReplayers[cur]();
+  });
+}
+steps.forEach(s=>s.addEventListener('click',()=>goTo(+s.dataset.goto)));
+document.querySelectorAll('.func[data-goto]').forEach(f=>f.addEventListener('click',()=>goTo(+f.dataset.goto)));
+document.addEventListener('keydown',e=>{ if(e.key==='ArrowRight'&&cur<pages.length-1) goTo(cur+1); else if(e.key==='ArrowLeft'&&cur>0) goTo(cur-1); });
+window.addEventListener('resize',()=>chartMap.forEach(c=>c.resize()));
+
+/* ================= AI 问答 ================= */
+function aiAdd(who, html){
+  const c=document.getElementById('aiChat');
+  const d=document.createElement('div');
+  d.className='ai-msg '+(who==='user'?'ai-user':'ai-bot');
+  d.innerHTML='<div class="ai-avatar">'+(who==='user'?'👤':'🤖')+'</div><div class="ai-bubble">'+html+'</div>';
+  c.appendChild(d); c.scrollTop=c.scrollHeight; return d;
+}
+function aiReply(q){
+  const t=q.replace(/\s/g,'');
+  const aqi=pm25ToAQI(raw.pm25[liveIdx]);
+  if(/自适应|卡尔曼|kalman/i.test(t)) return '自适应卡尔曼滤波：'+FILTER_INFO.adaptive.principle+' 相比固定 R 的卡尔曼滤波，在噪声未知或时变场景下跟踪更稳健。';
+  if(/融合|冗余|多传感器|方差/i.test(t)) return '多传感器融合：'+FUSION_INFO.adaptive+' 通过三路 PM2.5 冗余观测，可将等效测量噪声显著降低。';
+  if(/aqi|空气|污染|等级|pm2.5/i.test(t)) return '当前实时 AQI 为 <b>'+aqi.a+'</b>（等级：<b>'+LEVELS[aqi.level]+'</b>），由 PM2.5 浓度分断线性插值得到，随实时数据每秒更新。';
+  if(/算法|对比|选|区别|滤波/i.test(t)) return '去噪算法各有侧重：滑动平均/低通实现简单但滞后，中值滤波抗脉冲异常值，卡尔曼在噪声已知时最优，自适应卡尔曼在噪声未知时更稳健。';
+  if(/你好|hi|hello|系统|介绍|是什么|功能/i.test(t)) return '这是「基于自适应卡尔曼滤波的多传感器空气质量监测系统」，包含数据采集、滤波去噪、多传感器融合、结果分析与实时可视化五大功能模块。';
+  return '这个问题我还在学习～ 可以试试问我：自适应卡尔曼、多传感器融合、AQI 等级、算法对比等。';
+}
+function sendAI(q){
+  q=(q||'').trim(); if(!q) return;
+  aiAdd('user',q.replace(/</g,'&lt;'));
+  const typing=aiAdd('bot','<span class="ai-typing"><i></i><i></i><i></i></span>');
+  const bubble=typing.querySelector('.ai-bubble');
+  setTimeout(()=>{ bubble.innerHTML=aiReply(q); }, 550);
+}
+document.getElementById('aiSend').addEventListener('click',()=>{ sendAI(document.getElementById('aiInput').value); document.getElementById('aiInput').value=''; });
+document.getElementById('aiInput').addEventListener('keydown',e=>{ if(e.key==='Enter'){ sendAI(e.target.value); e.target.value=''; } });
+document.getElementById('aiChips').addEventListener('click',e=>{ const c=e.target.closest('.chip'); if(c) sendAI(c.textContent); });
+document.querySelectorAll('.faq-item').forEach(f=>f.addEventListener('click',()=>sendAI(f.dataset.q)));
+goTo(0);
+const _goPage = new URLSearchParams(location.search).get('go');
+if (_goPage !== null && !isNaN(+_goPage)) setTimeout(()=>goTo(+_goPage), 200);
+</script>
+</body>
+</html>
